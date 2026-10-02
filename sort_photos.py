@@ -5,11 +5,11 @@ Uses the EXIF DateTimeOriginal tag when available (requires Pillow), and
 falls back to the file's modification time otherwise.
 """
 
-import argparse
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
+
+import click
 
 try:
     from PIL import Image
@@ -69,7 +69,7 @@ def sort_photos(source, destination, copy=False, recursive=False, dry_run=False)
                    if p.is_file() and p.suffix.lower() in EXTENSIONS)
 
     if not files:
-        print(f"No photos found in {source}")
+        click.echo(f"No photos found in {source}")
         return
 
     action = "Copy" if copy else "Move"
@@ -77,7 +77,7 @@ def sort_photos(source, destination, copy=False, recursive=False, dry_run=False)
     for path in files:
         folder = destination / creation_date(path).strftime("%Y_%m_%d")
         if dry_run:
-            print(f"{action} {path.name} -> {folder.name}/")
+            click.echo(f"{action} {path.name} -> {folder.name}/")
             continue
 
         folder.mkdir(parents=True, exist_ok=True)
@@ -88,38 +88,30 @@ def sort_photos(source, destination, copy=False, recursive=False, dry_run=False)
             shutil.copy2(path, target)
         else:
             shutil.move(str(path), str(target))
-        print(f"{path.name} -> {folder.name}/{target.name}")
+        click.echo(f"{path.name} -> {folder.name}/{target.name}")
         moved += 1
 
     if dry_run:
-        print(f"\nDry run: {len(files)} photo(s) would be sorted.")
+        click.echo(f"\nDry run: {len(files)} photo(s) would be sorted.")
     else:
-        print(f"\nDone: {moved} photo(s) sorted into {destination}")
+        click.echo(f"\nDone: {moved} photo(s) sorted into {destination}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("source", type=Path, help="folder containing the photos")
-    parser.add_argument("-d", "--destination", type=Path,
-                        help="where the date folders go (default: the source folder)")
-    parser.add_argument("-c", "--copy", action="store_true",
-                        help="copy instead of move")
-    parser.add_argument("-r", "--recursive", action="store_true",
-                        help="also scan subfolders")
-    parser.add_argument("-n", "--dry-run", action="store_true",
-                        help="show what would happen without touching any files")
-    args = parser.parse_args()
-
-    if not args.source.is_dir():
-        sys.exit(f"error: {args.source} is not a directory")
-
+@click.command(help=__doc__)
+@click.argument("source", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("-d", "--destination", type=click.Path(file_okay=False, path_type=Path),
+              help="Where the date folders go  [default: the source folder]")
+@click.option("-c", "--copy", is_flag=True, help="Copy instead of move.")
+@click.option("-r", "--recursive", is_flag=True, help="Also scan subfolders.")
+@click.option("-n", "--dry-run", is_flag=True,
+              help="Show what would happen without touching any files.")
+def main(source, destination, copy, recursive, dry_run):
     if Image is None:
-        print("note: Pillow not installed, using file modification times "
-              "(pip install Pillow for EXIF dates)\n")
+        click.secho("note: Pillow not installed, using file modification times "
+                    "(pip install Pillow for EXIF dates)\n", fg="yellow")
 
-    sort_photos(args.source, args.destination or args.source,
-                copy=args.copy, recursive=args.recursive, dry_run=args.dry_run)
+    sort_photos(source, destination or source,
+                copy=copy, recursive=recursive, dry_run=dry_run)
 
 
 if __name__ == "__main__":
